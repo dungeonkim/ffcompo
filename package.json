@@ -1,0 +1,22 @@
+{
+    "name": "ffcompo",
+    "version": "0.1.0",
+    "description": "JS component system.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dungeonkim/ffcomponent.git"
+    },
+    "author": "Kim, Donggun",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/dungeonkim/ffcomponent/issues"
+    },
+    "homepage": "https://github.com/dungeonkim/ffcomponent#readme",
+    "dependencies": {
+        "ffevent": "^0.1.0"
+    }
+}

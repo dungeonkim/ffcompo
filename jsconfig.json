@@ -1,0 +1,18 @@
+// https://code.visualstudio.com/docs/languages/jsconfig
+{
+    "compilerOptions": {
+        "allowImportingTsExtensions": true,
+        "checkJs": true,
+        "target": "esnext",
+        "lib": [
+            "es2022",
+            "dom",
+            "webworker"
+        ],
+        "module": "esnext",
+        "baseUrl": ".",
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+    },
+    "allowSyntheticDefaultImports": true,
+}
