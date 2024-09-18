@@ -19,11 +19,11 @@ export class Component extends EventDispatcher {
 
     [key: string]: any;
 
-    protected _parentComponent: Component;
-    protected _childComponents: Record<string, Component>;
-    protected _componentName: string;
+    protected _parent: Component;
+    protected _components: Record<string, Component>;
+    protected _name: string;
 
-    get parentComponent(): Component;
+    get parent(): Component;
 
     constructor(): Component;
 
