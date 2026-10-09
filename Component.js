@@ -1,7 +1,37 @@
 import { Event } from 'ffevent';
 import { EventDispatcher } from 'ffevent';
 
+// type → Set of WeakRefs to its live components (getAllComponents). A Set, not an array: adding and
+// removing stay O(1) however many components exist (an array scan per add was O(n²) overall).
 const componentSearchMap = new WeakMap();
+const refOf = new WeakMap();        // component → its one WeakRef
+
+function typesOf( com ) {
+
+    const types = [];
+    for ( let proto = Object.getPrototypeOf( com ); proto != null && proto != Component.prototype; proto = Object.getPrototypeOf( proto ) ) types.push( proto.constructor );
+    return types;
+
+}
+
+// collected components leave dead refs behind: sweep them once the set has doubled since the last sweep
+function register( type, com ) {
+
+    let set = componentSearchMap.get( type );
+    if ( !set ) { set = new Set(); set.swept = 0; componentSearchMap.set( type, set ); }
+    let ref = refOf.get( com );
+    if ( !ref ) { ref = new WeakRef( com ); refOf.set( com, ref ); }
+    set.add( ref );
+    if ( set.size > 2 * set.swept + 64 ) sweep( set );
+
+}
+
+function sweep( set ) {
+
+    for ( const ref of set ) if ( ref.deref() === undefined ) set.delete( ref );
+    set.swept = set.size;
+
+}
 
 export class Component extends EventDispatcher {
 
@@ -30,7 +60,7 @@ export class Component extends EventDispatcher {
 
     get parent() {
     
-        return this._parent.deref();
+        return this._parent?.deref();
     
     }
 
@@ -48,7 +78,7 @@ export class Component extends EventDispatcher {
         // 붙이려는 컴포넌트가 다른데 붙어있었던 경우 제거
         if ( com._parent != null ) {
 
-            com.removeFromParent();
+            com.removeComponentFromParent();
         
         }
 
@@ -57,7 +87,7 @@ export class Component extends EventDispatcher {
             // 같은 이름의 컴포넌트가 붙어있던 경우 이전 컴포넌트를 제거
             if ( this._components[comName] != null ) {
 
-                this._components[comName].removeFromParent();
+                this._components[comName].removeComponentFromParent();
             
             }
             com._name = comName;
@@ -69,39 +99,8 @@ export class Component extends EventDispatcher {
         }
         this._components[com._name] = com;
 
-        const prototypes = [];
-
-        // 자신과 부모 클래스의 모든 프로토타입을 찾아서 등록한다.
-        for ( let proto = Object.getPrototypeOf( com ); proto != null && proto != Component.prototype; proto = Object.getPrototypeOf( proto ) ) {
-
-            prototypes.push( proto.constructor );
-        
-        }
-        for ( const proto of prototypes ) {
-
-            const arr = componentSearchMap.get( proto ) ?? [];
-
-            let found = false;
-
-            for ( const item of arr ) {
-
-                if ( item.deref() === com ) {
-
-                    found = true;
-                    break;
-                
-                }
-            
-            }
-
-            if ( !found ) {
-
-                arr.push( new WeakRef( com ) );
-                componentSearchMap.set( proto,arr.filter( item => item.deref() !== undefined ) );
-            
-            }
-        
-        }
+        // 자신과 부모 클래스의 모든 타입에 등록한다.
+        for ( const type of typesOf( com ) ) register( type, com );
         com._parent = new WeakRef( this );
         //@ts-ignore
         const event = new Event( Event.COMPONENT_ADDED, { parent: this, component: com } );
@@ -126,32 +125,15 @@ export class Component extends EventDispatcher {
         }
         delete parent._components[this._name];
 
-        let arr = componentSearchMap.get( this.constructor );
+        // 등록했던 모든 타입에서 뺀다.
+        const ref = refOf.get( this );
+        for ( const type of typesOf( this ) ) {
 
-        console.assert( Array.isArray( arr ) );
+            const set = componentSearchMap.get( type );
+            if ( !set ) continue;
+            set.delete( ref );
+            if ( set.size === 0 ) componentSearchMap.delete( type );
 
-        arr = arr.filter( item => {
-
-            let derefValue = item.deref();
-
-            if ( derefValue === undefined ) {
-
-                return false;
-            
-            }
-            return derefValue !== this;
-
-        } );
-
-
-        if ( arr.length > 0 ) {
-
-            componentSearchMap.set( this.constructor,arr );
-        
-        } else {
-
-            componentSearchMap.delete( this.constructor );
-        
         }
         
         //@ts-ignore
@@ -173,7 +155,7 @@ export class Component extends EventDispatcher {
 
                 if ( child instanceof com ) {
 
-                    child.removeFromParent();
+                    child.removeComponentFromParent();
                     removed++;
                 
                 }
@@ -186,7 +168,7 @@ export class Component extends EventDispatcher {
 
             if ( targetCom ) {
 
-                targetCom.removeFromParent();
+                targetCom.removeComponentFromParent();
                 removed++;
             
             }
@@ -268,29 +250,18 @@ export class Component extends EventDispatcher {
 
     static _getAllComponentsNativeArray( comType ) {
 
-        let arr = componentSearchMap.get( comType );
-        
-        if ( arr == null ) return null;
+        const set = componentSearchMap.get( comType );
 
-        arr = arr.filter( item => item.deref() !== undefined );
-
-        if ( arr.length > 0 ) {
-
-            componentSearchMap.set( comType,arr );
-        
-        } else {
-
-            componentSearchMap.delete( comType.constructor );
-        
-        }
-
-        return arr;
+        if ( set == null ) return null;
+        sweep( set );
+        if ( set.size === 0 ) componentSearchMap.delete( comType );
+        return [ ...set ];
     
     }
 
     static getAllComponents( comType ) {
 
-        return this._getAllComponentsNativeArray( comType ).map( item => item.deref() );
+        return this._getAllComponentsNativeArray( comType )?.map( item => item.deref() ) ?? [];
     
     }
 
